@@ -1,0 +1,93 @@
+---
+title: "Séries temporelles et reproductibilité"
+author: "Mathieu Rémy"
+date: "16/04/2020"
+output: html_document
+---
+
+# 1. Créer une série temporelle du CO2 à partir des données de hawai.csv
+
+```{r, warning = FALSE}
+## Lecture du fichier hawaï.csv
+library('tidyverse')
+library(lubridate) ## Package pour la manipulation des dates (notes de cours 11.1)
+
+Hawai <- read.csv('Hawai.csv', header = TRUE, sep = ',')
+
+# Visualisation des données 
+
+ min_CO2 <-min(Hawai$CO2)
+ max_CO2 <- max(Hawai$CO2) ## pour mieux ajuster le ylim 
+
+visua_1 <- ggplot(Hawai, aes(x = time , y = CO2 )) +
+  ylim(310, 380)+
+  geom_line()
+visua_1 # voir le graph des données 
+
+# Création de la série temporelle  (notes de cours 11.2)
+library(forecast)
+
+Hawai_ts <- ts(Hawai$CO2,
+                  start = c(Hawai$time[1]), # départ de la série à la première valeur
+               frequency = 12)  ## Nombre de mois 
+
+autoplot(Hawai_ts) # visualisation graphique 
+```
+
+
+# 2. Séparer la série en parties d'entraînement (environ 70% des données) et en partie test  (notes de cour 11.3.1)
+
+Nous voulons un modèle capable de prédire le futur. Pour cette raison, le jeu de données d'entraînement se fait sur les données (70%) du début de la série. Les restantes (30% des données) seront utilisées pour tester le modèle. 
+```{r}
+
+bound <- floor((nrow(Hawai)*0.70))    # Trouver les données d'entrainement
+bound
+
+Hawai_ts_train <- window(Hawai_ts, start = 1958.167, end = 1988.833)
+Hawai_ts_test <- window(Hawai_ts, start = 	1988.917) # Basé sur l'exemple dans les notes de cours (11.3.1)
+```
+
+
+# 3. Créer un modèle ETS sur les données d'entraînement, puis projeter la prévision de CO2 atmosphérique pour comparer aux données test
+
+```{r}
+# Modèle ETS optimiser par R 
+# Basé sur l'exemple dans les notes de cours (11.3.2.4)
+
+fit <- ets(Hawai_ts_train) # création du modèle
+summary(fit) # sommaire des caractéristique du modèle créé
+autoplot(fit) # voir les données en graphique
+
+pred_Hawai <- fit%>%
+  forecast(h=158)  #Prédiction des données 
+
+autoplot(pred_Hawai) +    # Courbe des prédictions  
+  autolayer(Hawai_ts_test, color = rgb(0, 0, 0, 0.8)) +  # Courbe des données test 
+  labs(x = "time", y = "CO2")
+
+```
+
+# 4. Effectuer une analyse des résidus
+
+```{r}
+
+checkresiduals(pred_Hawai)
+```
+
+
+
+# 5. Le modèle est-il fiable? 
+
+- Le modèle ne teint pas compte de la tendance haussière des taux de CO2. L'algorithme de holt's pourrait donner des meilleurs résultat car, il teint compte des tendances haussières avec la fonction "damped". 
+- Les résidus semblent bien respecter la normalité. 
+- Pour le "Ljung-Box", il indique que la probabilité que les résidus aient été générés par un bruit blanc est faible (p-value = 3.437e-08),
+il y a une possible structure dans les données, mais le modèle ne la pas illustrée. 
+
+
+Comment pourrait-il être amélioré?
+
+Il faudra comparer avec un modèle basé sur l'algorithme de holt-Winter's. La tendance générale (hausière) et l'effet saisonnier seront pris en considération dans ce genre d'algorithme.
+
+
+
+
